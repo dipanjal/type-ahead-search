@@ -1,0 +1,6 @@
+*.log
+.idea
+.vscode
+.DS_Store
+type-ahead-search.tar.gz
+git-init.sh

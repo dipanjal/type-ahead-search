@@ -1,0 +1,112 @@
+---
+version: '3.8'
+services:
+
+## microservice common event co-ordinator
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    hostname: zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+
+  # # # # # # # # # 
+  # Assembler
+  # # # # # # # # # 
+
+  # ## needed for pub-sub
+  # assembler.broker:
+  #   image: wurstmeister/kafka:2.12-2.5.0
+  #   hostname: assembler.broker
+  #   container_name: assembler.broker
+  #   depends_on:
+  #     - zookeeper
+  #   ports:
+  #     - "19092:19092"
+  #     - "9092"
+  #   environment:
+  #     KAFKA_BROKER_ID: 1
+  #     KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+  #     KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONNECTIONS_FROM_HOST:PLAINTEXT
+
+  #     KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://assembler.broker:9092,CONNECTIONS_FROM_HOST://localhost:19092
+  #     KAFKA_LISTENERS: PLAINTEXT://:9092,CONNECTIONS_FROM_HOST://:19092
+
+  #     KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+  #     KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+  #     KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+  #     KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+  #     KAFKA_JMX_PORT: 9101
+
+  # ## needed for high through-put data
+  # assembler.schema-registry:
+  #   image: confluentinc/cp-schema-registry:5.5.1
+  #   container_name: assembler.schema-registry
+  #   ports: 
+  #     - 8081:8081
+  #   depends_on:
+  #     - zookeeper
+  #     - assembler.broker
+  #   environment:
+  #     SCHEMA_REGISTRY_HOST_NAME: assembler.schema-registry
+  #     SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: zookeeper:2181
+
+##### TODO: KAFKA Connect with HDFS Sink ########
+
+  ## Hadoop master node
+  assembler.hadoop.namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: assembler.hadoop.namenode
+    hostname: assembler.hadoop.namenode
+    restart: always
+    ports:
+      - 9870:9870
+      - 9000:9000
+    environment:
+      - CLUSTER_NAME=test
+    env_file:
+      - ./assembler/hadoop/hadoop.env
+
+  ## Hadoop worker node    
+  assembler.hadoop.datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: assembler.hadoop.datanode
+    hostname: assembler.hadoop.datanode
+    restart: always
+    ports:
+      - 9864:9864
+    environment:
+      SERVICE_PRECONDITION: "assembler.hadoop.namenode:9870"
+    env_file:
+      - ./assembler/hadoop/hadoop.env
+  
+  assembler.hadoop.resourcemanager:
+    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
+    container_name: assembler.hadoop.resourcemanager
+    restart: always
+    environment:
+      SERVICE_PRECONDITION: "assembler.hadoop.namenode:9000 assembler.hadoop.namenode:9870 assembler.hadoop.datanode:9864"
+    env_file:
+      - ./assembler/hadoop/hadoop.env
+
+  assembler.hadoop.nodemanager:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: assembler.hadoop.nodemanager
+    restart: always
+    environment:
+      SERVICE_PRECONDITION: "assembler.hadoop.namenode:9000 assembler.hadoop.namenode:9870 assembler.hadoop.datanode:9864 assembler.hadoop.resourcemanager:8088"
+    env_file:
+      - ./assembler/hadoop/hadoop.env
+  
+  assembler.hadoop.historyserver:
+    image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
+    container_name: assembler.hadoop.historyserver
+    restart: always
+    environment:
+      SERVICE_PRECONDITION: "assembler.hadoop.namenode:9000 assembler.hadoop.namenode:9870 assembler.hadoop.datanode:9864 assembler.hadoop.resourcemanager:8088"
+    env_file:
+      - ./assembler/hadoop/hadoop.env
